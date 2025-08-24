@@ -45,12 +45,19 @@ input { background:black; color:#00ff00; border:1px solid #00ff00; padding:8px; 
     setTimeout(() => popup.style.display = "none", 2000);
   }
 
-  // -------- PeerJS Init --------
+  // -------- PeerJS Init with STUN --------
   const peer = new Peer(myTempNumber, {
     host: "web-call-zen9.onrender.com",
     port: 443,
     path: "/myapp",
-    secure: true
+    secure: true,
+    config: {
+      'iceServers': [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    }
   });
 
   let currentCall = null;
