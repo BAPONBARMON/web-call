@@ -1,103 +1,130 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>P2P Call App</title>
+  <meta charset="UTF-8">
+  <title>Web P2P Call</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    body { background: black; color: #00ff00; font-family: monospace; text-align: center; padding: 20px; }
-    .btn { background: #003300; border: 1px solid #00ff00; padding: 10px 20px; color: #00ff00; cursor: pointer; margin: 5px; border-radius: 8px; }
-    .btn:hover { background: #00ff00; color: black; }
-    #popup { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: black; border: 1px solid #00ff00; padding: 10px; display: none; color: #00ff00; }
+    body { background:black; color:lime; font-family:monospace; text-align:center; }
+    .popup { position:fixed; top:20px; left:50%; transform:translateX(-50%);
+             background:rgba(0,255,0,0.2); padding:10px 20px; border:1px solid lime;
+             border-radius:8px; display:none; }
+    button { background:black; color:lime; border:1px solid lime; padding:10px 15px; margin:5px; cursor:pointer; }
+    #callTimer { margin-top:10px; font-size:18px; }
   </style>
 </head>
 <body>
-  <h2>🔗 P2P Call Hacker Style</h2>
-  <p>Your Temp Number: <span id="my-number"></span></p>
-  <input id="callto" placeholder="Enter number to call" />
-  <button class="btn" onclick="makeCall()">Call</button>
-  <br/><br/>
-  <button class="btn" id="endCallBtn" onclick="endCall()" disabled>End Call</button>
-  <button class="btn" id="muteBtn" onclick="toggleMute()" disabled>Mute</button>
-  <button class="btn" id="speakerBtn" onclick="toggleSpeaker()" disabled>Speaker</button>
-  <p id="timer">Call Time: 00:00</p>
-  <div id="popup"></div>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <h2>📞 Web P2P Call</h2>
+  <p>Your Temp Number: <b id="myNumber"></b></p>
+
+  <input type="text" id="remoteId" placeholder="Enter remote number">
+  <button onclick="makeCall()">Call</button>
+  <button onclick="endCall()">End Call</button>
+  <button onclick="toggleSpeaker()">🔊 Speaker</button>
+
+  <div id="callTimer">Call Duration: 00:00</div>
+
+  <div id="popup" class="popup"></div>
+
   <script>
-    const myNumber = "9957" + Math.floor(100000 + Math.random() * 900000);
-    document.getElementById('my-number').innerText = myNumber;
-    const peer = new Peer(myNumber, {
-      host: "REPLACE_WITH_RENDER_URL",
+    // -------- Temp Number Generator --------
+    function generateTempNumber() {
+      return "9957" + Math.floor(100000 + Math.random() * 899999);
+    }
+    const myTempNumber = generateTempNumber();
+    document.getElementById("myNumber").textContent = myTempNumber;
+
+    // -------- PeerJS Init with Backend --------
+    const peer = new Peer(myTempNumber, {
+      host: "web-call-zen9.onrender.com",  // 🔥 Render backend
       port: 443,
-      path: "/"
+      path: "/myapp",
+      secure: true
     });
-    let localStream, currentCall, callTimer, seconds = 0;
-    function showPopup(msg) {
-      const popup = document.getElementById('popup');
-      popup.innerText = msg;
-      popup.style.display = 'block';
-      setTimeout(()=>{ popup.style.display='none'; },2000);
-    }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => { localStream = stream; });
-    peer.on('call', call => {
-      showPopup("Incoming Call...");
-      call.answer(localStream);
-      call.on('stream', remoteStream => { playRemote(remoteStream); });
-      currentCall = call; startTimer();
-      enableButtons();
+
+    let currentCall = null;
+    let callStartTime = null;
+    let timerInterval = null;
+    let speakerOn = false;
+
+    peer.on("open", (id) => showPopup("Connected with ID: " + id));
+
+    peer.on("call", (call) => {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        call.answer(stream);
+        bindCallEvents(call);
+      });
     });
+
     function makeCall() {
-      const num = document.getElementById('callto').value;
-      if(!num) return;
-      showPopup("Calling " + num + "...");
-      const call = peer.call(num, localStream);
-      call.on('stream', remoteStream => { playRemote(remoteStream); });
-      call.on('close', ()=>{ endCall(); });
-      currentCall = call; startTimer();
-      enableButtons();
+      const remoteId = document.getElementById("remoteId").value;
+      if (!remoteId) return showPopup("Enter a number to call");
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        const call = peer.call(remoteId, stream);
+        bindCallEvents(call);
+      });
     }
-    function playRemote(stream) {
-      const audio = document.createElement('audio');
-      audio.srcObject = stream;
-      audio.autoplay = true;
-      audio.id = "remoteAudio";
-      document.body.appendChild(audio);
+
+    function bindCallEvents(call) {
+      currentCall = call;
+      callStartTime = Date.now();
+      startTimer();
+
+      call.on("stream", (remoteStream) => {
+        const audio = document.createElement("audio");
+        audio.srcObject = remoteStream;
+        audio.autoplay = true;
+        audio.id = "remoteAudio";
+        document.body.appendChild(audio);
+        showPopup("Call Connected");
+      });
+
+      call.on("close", () => {
+        stopTimer();
+        showPopup("Call Ended");
+      });
     }
+
     function endCall() {
-      if(currentCall) currentCall.close();
-      showPopup("Call Ended");
-      clearInterval(callTimer);
-      seconds=0; document.getElementById('timer').innerText="Call Time: 00:00";
-      disableButtons();
-    }
-    function toggleMute() {
-      localStream.getAudioTracks()[0].enabled = !localStream.getAudioTracks()[0].enabled;
-      showPopup(localStream.getAudioTracks()[0].enabled ? "Unmuted" : "Muted");
-    }
-    function toggleSpeaker() {
-      const audio = document.getElementById("remoteAudio");
-      if(audio) {
-        audio.muted = !audio.muted;
-        showPopup(audio.muted ? "Speaker Off" : "Speaker On");
+      if (currentCall) {
+        currentCall.close();
+        currentCall = null;
+        stopTimer();
+        showPopup("Call Ended");
       }
     }
+
+    function toggleSpeaker() {
+      const audio = document.getElementById("remoteAudio");
+      if (audio) {
+        speakerOn = !speakerOn;
+        audio.muted = !speakerOn;
+        showPopup(speakerOn ? "Speaker ON" : "Speaker OFF");
+      }
+    }
+
+    // -------- Timer --------
     function startTimer() {
-      clearInterval(callTimer);
-      callTimer = setInterval(()=>{
-        seconds++;
-        const m = String(Math.floor(seconds/60)).padStart(2,'0');
-        const s = String(seconds%60).padStart(2,'0');
-        document.getElementById('timer').innerText = `Call Time: ${m}:${s}`;
-      },1000);
+      timerInterval = setInterval(() => {
+        const diff = Date.now() - callStartTime;
+        const sec = Math.floor(diff / 1000) % 60;
+        const min = Math.floor(diff / 60000);
+        document.getElementById("callTimer").textContent =
+          `Call Duration: ${String(min).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+      }, 1000);
     }
-    function enableButtons(){
-      document.getElementById('endCallBtn').disabled=false;
-      document.getElementById('muteBtn').disabled=false;
-      document.getElementById('speakerBtn').disabled=false;
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      document.getElementById("callTimer").textContent = "Call Duration: 00:00";
     }
-    function disableButtons(){
-      document.getElementById('endCallBtn').disabled=true;
-      document.getElementById('muteBtn').disabled=true;
-      document.getElementById('speakerBtn').disabled=true;
+
+    // -------- Popup --------
+    function showPopup(msg) {
+      const popup = document.getElementById("popup");
+      popup.innerText = msg;
+      popup.style.display = "block";
+      setTimeout(() => popup.style.display = "none", 2000);
     }
   </script>
 </body>
