@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2P Hacker Green Call</title>
+<style>
+body {
+    font-family: 'Courier New', monospace;
+    background: #000;
+    color: #00ff00;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+}
+h1 { color: #00ff00; margin-bottom: 5px; text-shadow:0 0 5px #0f0; }
+#number { font-size: 1.2em; margin-bottom: 15px; }
+select, input, button {
+    padding: 8px;
+    margin: 5px;
+    background: #111;
+    color: #0f0;
+    border: 1px solid #0f0;
+    font-family: monospace;
+}
+button:hover { background: #0f0; color: #000; }
+#statusPopup, #incomingCallPopup { margin-top:20px; padding:15px; min-width:250px; border:2px solid #0f0; text-align:center; box-shadow:0 0 10px #0f0; display:none; }
+#remoteAudio { display:none; }
+button.control { width: 80px; }
+#timer { margin-top:10px; font-size:1.1em; }
+</style>
+</head>
+<body>
+
+<h1>P2P Free Hacker Green Call</h1>
+<div>Temporary Number: <span id="number"></span></div>
+
+<select id="country">
+    <option value="+91">India (+91)</option>
+    <option value="+1">USA (+1)</option>
+    <option value="+44">UK (+44)</option>
+</select>
+
+<input type="text" id="dial" placeholder="Enter number to call">
+<button id="callBtn">Call</button>
+<button id="endBtn">End Call</button>
+
+<div id="statusPopup"></div>
+<div id="incomingCallPopup">
+    <div id="incomingText"></div>
+    <button id="acceptBtn" class="control">Accept</button>
+    <button id="rejectBtn" class="control">Reject</button>
+</div>
+
+<div>
+    <button id="muteBtn" class="control">Mute</button>
+    <button id="holdBtn" class="control">Hold</button>
+    <button id="speakerBtn" class="control">Speaker</button>
+</div>
+
+<div id="timer">Call Duration: 00:00</div>
+
+<audio id="remoteAudio" autoplay></audio>
+
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<script>
+const numberEl=document.getElementById('number');
+const statusPopup=document.getElementById('statusPopup');
+const incomingPopup=document.getElementById('incomingCallPopup');
+const incomingText=document.getElementById('incomingText');
+const dialEl=document.getElementById('dial');
+const callBtn=document.getElementById('callBtn');
+const endBtn=document.getElementById('endBtn');
+const acceptBtn=document.getElementById('acceptBtn');
+const rejectBtn=document.getElementById('rejectBtn');
+const muteBtn=document.getElementById('muteBtn');
+const holdBtn=document.getElementById('holdBtn');
+const speakerBtn=document.getElementById('speakerBtn');
+const remoteAudio=document.getElementById('remoteAudio');
+const timerEl=document.getElementById('timer');
+
+let localStream=null, currentCall=null, isMuted=false, isOnHold=false, isSpeakerOn=true;
+let callStartTime=null, callTimerInterval=null;
+
+// Generate Indian temp number starting 9957
+function generateNumber(){let middle=Math.floor(1000+Math.random()*9000); let suffix=Math.floor(1000+Math.random()*9000); return '9957'+middle+suffix;}
+let myNumber=generateNumber(); numberEl.innerText=myNumber;
+
+// PeerJS setup
+const peer=new Peer(myNumber,{host:'peerjs.com',secure:true,port:443});
+peer.on('open',id=>{ showStatus('Idle'); });
+peer.on('call',call=>{
+    currentCall=call;
+    incomingText.innerText='Incoming Call from '+call.peer;
+    incomingPopup.style.display='block';
+});
+
+// Microphone
+async function getMicrophoneStream(){ if(localStream) return localStream; try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true}); return localStream; }catch(err){ alert('Microphone access denied'); throw err; }}
+
+// Popups
+function showStatus(message,autoClose=false){ statusPopup.innerText=message; statusPopup.style.display='block'; if(autoClose){ setTimeout(()=>{ statusPopup.style.display='none'; },2000); } }
+function showTempPopup(message){ const tempPopup=document.createElement('div'); tempPopup.innerText=message; tempPopup.style.position='fixed'; tempPopup.style.top='20px'; tempPopup.style.left='50%'; tempPopup.style.transform='translateX(-50%)'; tempPopup.style.padding='10px 20px'; tempPopup.style.border='2px solid #0f0'; tempPopup.style.background='#000'; tempPopup.style.color='#0f0'; tempPopup.style.fontFamily='monospace'; tempPopup.style.boxShadow='0 0 10px #0f0'; tempPopup.style.zIndex=1000; document.body.appendChild(tempPopup); setTimeout(()=>{ tempPopup.remove(); },2000); }
+
+// Timer
+function startTimer(){ callStartTime=Date.now(); callTimerInterval=setInterval(()=>{ let diff=Math.floor((Date.now()-callStartTime)/1000); let m=Math.floor(diff/60); let s=diff%60; timerEl.innerText=`Call Duration: ${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; },1000);}
+function stopTimer(){ clearInterval(callTimerInterval); timerEl.innerText='Call Duration: 00:00';}
+
+// Call button
+callBtn.addEventListener('click',async()=>{
+    const target=dialEl.value.trim();
+    if(!target){ showTempPopup('Enter Number!'); return; }
+    const stream=await getMicrophoneStream();
+    showStatus('Ringing '+target+' ...');
+    const call=peer.call(target,stream);
+    setupCallEvents(call);
+});
+
+// End call
+endBtn.addEventListener('click',()=>{ endCurrentCall(); });
+
+// Accept
+acceptBtn.addEventListener('click',async()=>{
+    incomingPopup.style.display='none';
+    const stream=await getMicrophoneStream();
+    currentCall.answer(stream);
+    setupCallEvents(currentCall);
+});
+
+// Reject
+rejectBtn.addEventListener('click',()=>{ incomingPopup.style.display='none'; if(currentCall) currentCall.close(); currentCall=null; showStatus('Idle'); });
+
+// Mute
+muteBtn.addEventListener('click',()=>{ if(localStream){ isMuted=!isMuted; localStream.getAudioTracks()[0].enabled=!isMuted; muteBtn.innerText=isMuted?'Unmute':'Mute'; } });
+
+// Hold
+holdBtn.addEventListener('click',()=>{ if(localStream){ isOnHold=!isOnHold; localStream.getAudioTracks()[0].enabled=!isOnHold; holdBtn.innerText=isOnHold?'Resume':'Hold'; showStatus(isOnHold?'On Hold':'Connected'); } });
+
+// Speaker
+speakerBtn.addEventListener('click',async()=>{
+    if(!remoteAudio.srcObject) return;
+    try{
+        if(isSpeakerOn){ await remoteAudio.setSinkId('default'); speakerBtn.innerText='Earpiece'; } 
+        else{ const devices=await navigator.mediaDevices.enumerateDevices(); const audioOutput=devices.find(d=>d.kind==='audiooutput'); if(audioOutput) await remoteAudio.setSinkId(audioOutput.deviceId); speakerBtn.innerText='Speaker'; }
+        isSpeakerOn=!isSpeakerOn;
+    }catch(err){ console.warn('Speaker switch failed',err);}
+});
+
+// Setup call events
+function setupCallEvents(call){
+    currentCall=call;
+    call.on('stream',remoteStream=>{ remoteAudio.srcObject=remoteStream; remoteAudio.style.display='block'; showStatus('Connected with '+call.peer); startTimer(); });
+    call.on('close',()=>{ endCurrentCall(); });
+    call.on('error',()=>{ endCurrentCall(); });
+}
+
+// End call
+function endCurrentCall(){
+    if(currentCall){ currentCall.close(); currentCall=null; }
+    remoteAudio.srcObject=null;
+    remoteAudio.style.display='none';
+    showStatus('Call Ended',true);
+    stopTimer();
+}
+</script>
+</body>
+</html>
